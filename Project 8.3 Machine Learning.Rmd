@@ -1,0 +1,147 @@
+---
+title: "Project 8.4 Machine Learning"
+author: "Ignas M"
+date: "7 November 2016"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache=TRUE)
+```
+
+
+### Loading
+
+Loading packages.
+```{r pack, message=FALSE, warning=FALSE}
+library(caret)
+library(ggplot2)
+library(randomForest)
+library(rpart)
+```
+
+
+Loading data.
+```{r load}
+set.seed(543)
+building<-read.csv("pml-training.csv")
+validation<-read.csv("pml-testing.csv")
+dim(building)
+dim(validation)
+```
+
+### Pre-processing
+
+Step 1 - removing near zero values. As there are 159 potential predictor variables to choose from, building accurate models with all of them can be resource-consuming. In order to simplify the dataset, variables with near-zero variance can be removed as they would be poor predictors.
+
+```{r preproc}
+nsv<-nearZeroVar(building)
+building2<-building[,-nsv]
+length(nsv)
+dim(building2)
+#summary(building2)
+
+```
+
+We can see that  60 variables had near-zero variance. Removing these, it leaves us a dataset with 100 columns, including classe.
+
+Step 2 - removing NAs. After a quick look into the values of remaining columns we can see that there is are columns with very high (~97%) proportion of missing values. This is way too high to be imputed accurately, so I will remove such columns from model-building as they cannot be accurately imputed and would distort the models.
+
+```{r nona}
+building3<-building2[,colSums(is.na(building2))==0]
+dim(building3)
+names(building3)
+```
+
+We can see that after removing columns with NA values, a dataset with 59 columns (including classe) remains. This is a much more simple dataset that we will be using to build the prediction models.
+
+### Partitioning Dataset
+
+First of all, the dataset needs to be partitioned into training and testing. We will be using provided dataset for validation, so to test the accuracy of the model, we have to create testing datasets from the preprocessed data.
+
+```{r part}
+intrain<-createDataPartition(y=building3$classe, p=3/4, list=FALSE)
+train<-building3[intrain,]
+test<-building3[-intrain,]
+dim(train)
+dim(test)
+
+```
+
+Using 75% threshold, we created a dataset with 14718 lines to train the models, and one with 4904 lines to test them.
+
+### Building models
+
+In this section, we will build 5 different models using various modelling algorighms:
+
+Model 1 = Classification Tree
+Model 2 = Random Forest
+Model 3 = Boosting
+Model 4 = Linear Discriminant Analysis
+Model 5 = Naive Bayes
+
+```{r models, message=FALSE, warning=FALSE}
+model1<-train(classe~., data=train, method="rpart")
+model2<-train(classe~., data=train, method="rf")
+model3<-train(classe~., data=train, method="gbm", verbose=FALSE)
+model4<-train(classe~., data=train, method="lda")
+model5<-train(classe~., data=train, method="nb")
+```
+
+### Predictions
+
+Once the models are built, we will predict 5 testing datasets.
+```{r pred, message=FALSE, warning=FALSE}
+pred1<-predict(model1, test)
+pred2<-predict(model2, test)
+pred3<-predict(model3, test)
+pred4<-predict(model4, test)
+pred5<-predict(model5, test)
+```
+
+Finally, in order to determine how accurate the models we will use confusionMatrix function to compare real outcome vs. predicted values.
+
+```{r acc}
+confusionMatrix(pred1, test$classe)
+confusionMatrix(pred2, test$classe)
+confusionMatrix(pred3, test$classe)
+confusionMatrix(pred4, test$classe)
+confusionMatrix(pred5, test$classe)
+```
+
+This shows us the following accuracy of the models in predicting testing classe values:
+
+Model 1 = Classification Tree = Accuracy 66%
+Model 2 = Random Forest = Accuracy 100%
+Model 3 = Boosting = Accuracy 100%
+Model 4 = Linear Discriminant Analysis = Accuracy 100%
+Model 5 = Naive Bayes = Accuracy 86%
+
+We can see that Random Forest, Linear Discriminant Analysis & Boosting have all resulted in 100% accuracy. With 95% confidence, we can conclude that either of these three models would give an accurate result at least 99.92% of the time, which is an extremely good result.
+
+The tradeoff of using these models - they are extremely slow to build, even with the preprocessed dataset, so the reduced variance and high confidence interval come at a price of resource-intensive calculations.
+
+### Applying best models to validation set
+
+We will now use all 5 models on the validation dataset to predict classe values.
+
+```{R valid, message=FALSE, warning=FALSE}
+v1<-predict(model1, validation)
+v2<-predict(model2, validation)
+v3<-predict(model3, validation)
+v4<-predict(model4, validation)
+v5<-predict(model5, validation)
+print(v1)
+print(v2)
+print(v3)
+print(v4)
+print(v5)
+```
+
+## Conclusion
+
+The dataset had a lot of parameters with missing information. Having 97% of the data blank for some columns is too incomplete to be imputed accurately, so those columns had to be removed. Further 60 columns had near-zero variance, so were also removed from the models.
+
+When applying models on the validation dataset, 4 out of 5 models predicted identical results. As 3 out of these 4 models had 100% accuracy in resampled testing dataset, we will assume those predictions are the correct ones.
